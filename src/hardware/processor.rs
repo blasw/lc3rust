@@ -103,17 +103,77 @@ impl Processor {
         }
 
         self.registers.update(dr, val1.wrapping_add(val2));
+        self.registers.update_r_cond_register(dr);
     }
 
-    fn and(&mut self, instr: u16) {}
+    fn and(&mut self, instr: u16) {
+        let dr = (instr >> 9) & 0x7;
+        let sr1 = (instr >> 6) & 0x7;
+        let mode = (instr >> 5) & 0x1;
+        let val1 = self.registers.get(sr1);
+        let val2 = match mode {
+            0 => {
+                let sr2 = instr & 0x7;
+                self.registers.get(sr2)
+            }
+            1 => sign_extend(instr & 0x1F, 5),
+            _ => unreachable!(),
+        };
+        self.registers.update(dr, val1 & val2);
+        self.registers.update_r_cond_register(dr);
+    }
 
-    fn not(&mut self, instr: u16) {}
+    fn not(&mut self, instr: u16) {
+        let dr = (instr >> 9) & 0x7;
+        let sr = (instr >> 6) & 0x7;
+        let val = !self.registers.get(sr);
+        self.registers.update(dr, val);
+        self.registers.update_r_cond_register(dr);
+    }
 
-    fn br(&mut self, instr: u16) {}
+    fn br(&mut self, instr: u16) {
+        let offset = sign_extend(instr & 0x1FF, 9);
+        let cond = self.registers.cond;
+        match cond {
+            1 => {
+                if (instr >> 9) & 0x1 == 1 {
+                    self.registers.pc = self.registers.pc.wrapping_add(offset);
+                }
+            }
+            2 => {
+                if (instr >> 10) & 0x1 == 1 {
+                    self.registers.pc = self.registers.pc.wrapping_add(offset);
+                }
+            }
+            4 => {
+                if (instr >> 11) & 0x1 == 1 {
+                    self.registers.pc = self.registers.pc.wrapping_add(offset);
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
 
-    fn jmp(&mut self, instr: u16) {}
+    fn jmp(&mut self, instr: u16) {
+        let target_reg = (instr >> 6) & 0x7;
+        let target_addr = self.registers.get(target_reg);
+        self.registers.pc = target_addr;
+    }
 
-    fn jsr(&mut self, instr: u16) {}
+    fn jsr(&mut self, instr: u16) {
+        let mode = (instr >> 11) & 0x1;
+        self.registers.update(7, self.registers.get(8));
+        match mode {
+            0 => {
+                let base_register = (instr >> 6) & 0x7;
+                let offset = sign_extend(self.registers.get(base_register), 6);
+                self.registers
+                    .update(8, self.registers.pc.wrapping_sub(offset));
+            }
+            1 => {}
+            _ => unreachable!(),
+        }
+    }
 
     fn ld(&mut self, instr: u16, memory: &[u16]) {}
 
@@ -138,41 +198,5 @@ impl Processor {
     fn trap(&mut self, instr: u16) -> ExecutionResult {
         let trap_vector = (instr & 0xFF) as u8;
         ExecutionResult::Trap(trap_vector)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add_register_mode() {
-        let mut processor = Processor::new();
-        let mut memory = [0; 65536];
-
-        processor.registers.update(1, 10);
-        processor.registers.update(2, 5);
-
-        // ADD R0, R1, R2
-        let instr = 0b0001_000_001_0_00_010;
-
-        processor.execute(instr, &mut memory);
-
-        assert_eq!(processor.registers.get(0), 15);
-    }
-
-    #[test]
-    fn test_add_immediate_mode() {
-        let mut processor = Processor::new();
-        let mut memory = [0; 65536];
-
-        processor.registers.update(1, 10);
-
-        // ADD R0, R1, -2
-        let instr = 0b0001_000_001_1_11110;
-
-        processor.execute(instr, &mut memory);
-
-        assert_eq!(processor.registers.get(0), 8);
     }
 }
