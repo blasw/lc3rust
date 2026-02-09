@@ -27,7 +27,7 @@ impl VM {
     }
 
     pub fn execute(&mut self) {
-        while self.processor.registers.pc < MEMORY_SIZE as u16 {
+        while (self.processor.registers.pc as usize) < MEMORY_SIZE {
             let pc = self.processor.registers.pc;
             let instruction = self.memory[pc as usize];
             self.processor.registers.pc += 1;
