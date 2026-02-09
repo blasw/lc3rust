@@ -164,8 +164,7 @@ impl Processor {
 
         match mode {
             0x0 => { //JSRR
-                offset = sign_extend(self.registers.get(base_register), 6);
-                self.registers.pc = offset;
+                self.registers.pc = self.registers.get(base_register);
             }
             0x1 => { //JSR
                 offset = sign_extend(instr & 0x7FF, 11);
@@ -197,7 +196,7 @@ impl Processor {
         let base_reg = (instr >> 6) & 0x7;
         let offset6 = sign_extend(instr & 0x3F, 6);
         let val = self.registers.get(base_reg);
-        let res = memory[(val + offset6) as usize];
+        let res = memory[(val.wrapping_add(offset6)) as usize];
         self.registers.update(dr, res);
         self.registers.update_r_cond_register(dr);
     }

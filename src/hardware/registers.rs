@@ -32,7 +32,7 @@ impl Registers {
             r6: 0,
             r7: 0,
             pc: PC_START,
-            cond: 0,
+            cond: ConditionFlag::ZRO as u16,
         }
     }
 

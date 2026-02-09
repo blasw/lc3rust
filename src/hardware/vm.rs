@@ -1,7 +1,7 @@
-use super::processor::{Processor, ExecutionResult};
+use super::processor::{ExecutionResult, Processor};
 use super::syscalls::System;
 
-const MEMORY_SIZE: usize = u16::MAX as usize;
+const MEMORY_SIZE: usize = u16::MAX as usize + 1;
 
 pub struct VM {
     memory: [u16; MEMORY_SIZE],
@@ -33,7 +33,7 @@ impl VM {
             self.processor.registers.pc += 1;
 
             match self.processor.execute(instruction, &mut self.memory) {
-                ExecutionResult::Continue => {},
+                ExecutionResult::Continue => {}
                 ExecutionResult::Trap(trap_vector) => {
                     self.system.handle_trap(trap_vector, &mut self.processor.registers, &mut self.memory);
                 }
