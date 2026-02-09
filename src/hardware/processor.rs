@@ -134,23 +134,19 @@ impl Processor {
     fn br(&mut self, instr: u16) {
         let offset = sign_extend(instr & 0x1FF, 9);
         let cond = self.registers.cond;
-        match cond {
-            1 => {
-                if (instr >> 9) & 0x1 == 1 {
-                    self.registers.pc = self.registers.pc.wrapping_add(offset);
-                }
+        let nzp = instr >> 9;
+        let res = cond & nzp;
+        match res {
+            0x1 => {
+                self.registers.pc = self.registers.pc.wrapping_add(offset);
             }
-            2 => {
-                if (instr >> 10) & 0x1 == 1 {
-                    self.registers.pc = self.registers.pc.wrapping_add(offset);
-                }
+            0x2 => {
+                self.registers.pc = self.registers.pc.wrapping_add(offset);
             }
-            4 => {
-                if (instr >> 11) & 0x1 == 1 {
-                    self.registers.pc = self.registers.pc.wrapping_add(offset);
-                }
+            0x4 => {
+                self.registers.pc = self.registers.pc.wrapping_add(offset);
             }
-            _ => unreachable!(),
+            _ => {}
         }
     }
 
@@ -163,23 +159,48 @@ impl Processor {
     fn jsr(&mut self, instr: u16) {
         let mode = (instr >> 11) & 0x1;
         self.registers.update(7, self.registers.get(8));
+        let base_register = (instr >> 6) & 0x7;
+        let offset: u16;
+
         match mode {
-            0 => {
-                let base_register = (instr >> 6) & 0x7;
-                let offset = sign_extend(self.registers.get(base_register), 6);
-                self.registers
-                    .update(8, self.registers.pc.wrapping_sub(offset));
+            0x0 => { //JSRR
+                offset = sign_extend(self.registers.get(base_register), 6);
+                self.registers.pc = offset;
             }
-            1 => {}
+            0x1 => { //JSR
+                offset = sign_extend(instr & 0x7FF, 11);
+                self.registers.update(8, self.registers.pc.wrapping_add(offset));
+            }
             _ => unreachable!(),
         }
     }
 
-    fn ld(&mut self, instr: u16, memory: &[u16]) {}
+    fn ld(&mut self, instr: u16, memory: &[u16]) {
+        let dr = (instr >> 9) & 0x7;
+        let pcoffset9 = sign_extend(instr & 0x1FF, 9);
+        let val = memory[self.registers.pc.wrapping_add(pcoffset9) as usize];
+        self.registers.update(dr, val);
+        self.registers.update_r_cond_register(dr);
+    }
 
-    fn ldi(&mut self, instr: u16, memory: &[u16]) {}
+    fn ldi(&mut self, instr: u16, memory: &[u16]) {
+        let dr = (instr >> 9) & 0x7;
+        let pcoffset9 = sign_extend(instr & 0x1FF, 9);
+        let val1 = memory[self.registers.pc.wrapping_add(pcoffset9) as usize];
+        let val2 = memory[val1 as usize];
+        self.registers.update(dr, val2);
+        self.registers.update_r_cond_register(dr);
+    }
 
-    fn ldr(&mut self, instr: u16, memory: &[u16]) {}
+    fn ldr(&mut self, instr: u16, memory: &mut [u16]) {
+        let dr = (instr >> 9) & 0x7;
+        let base_reg = (instr >> 6) & 0x7;
+        let offset6 = sign_extend(instr & 0x3F, 6);
+        let val = self.registers.get(base_reg);
+        let res = memory[(val + offset6) as usize];
+        self.registers.update(dr, res);
+        self.registers.update_r_cond_register(dr);
+    }
 
     fn lea(&mut self, instr: u16) {
         let dr = (instr >> 9) & 0x7;
@@ -189,11 +210,30 @@ impl Processor {
         self.registers.update_r_cond_register(dr);
     }
 
-    fn st(&mut self, instr: u16, memory: &mut [u16]) {}
+    fn st(&mut self, instr: u16, memory: &mut [u16]) {
+        let sr = (instr >> 9) & 0x7;
+        let pcoffset9 = sign_extend(instr & 0x1FF, 9);
+        let addr = self.registers.pc.wrapping_add(pcoffset9) as usize;
+        memory[addr] = self.registers.get(sr);
+    }
 
-    fn sti(&mut self, instr: u16, memory: &mut [u16]) {}
+    fn sti(&mut self, instr: u16, memory: &mut [u16]) {
+        let sr = (instr >> 9) & 0x7;
+        let pcoffset9 = sign_extend(instr & 0x1FF, 9);
 
-    fn str(&mut self, instr: u16, _memory: &mut [u16]) {}
+        let addr1 = self.registers.pc.wrapping_add(pcoffset9) as usize;
+        let addr2 = memory[addr1] as usize;
+
+        memory[addr2] = self.registers.get(sr);
+    }
+
+    fn str(&mut self, instr: u16, memory: &mut [u16]) {
+        let sr = (instr >> 9) & 0x7;
+        let base_reg = (instr >> 6) & 0x7;
+        let offset6 = sign_extend(instr & 0x3F, 6);
+        let val = self.registers.get(base_reg);
+        memory[val.wrapping_add(offset6) as usize] = self.registers.get(sr);
+    }
 
     fn trap(&mut self, instr: u16) -> ExecutionResult {
         let trap_vector = (instr & 0xFF) as u8;
